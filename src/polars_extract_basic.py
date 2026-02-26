@@ -109,3 +109,22 @@ query = (
     .filter(pl.col("people_num").is_between(2, 4))
 )
 print(query.collect())
+
+## ランダムサンプリング（元データの構成比を考慮しない場合）
+### pandasを用いる場合(実数を指定してサンプリング)
+df = pd.read_parquet(path = path)
+df = df.sample(20000)
+print(df)
+### pandasを用いたサンプリング（割合とランダム値を指定した場合)
+df = pd.read_parquet(path = path)
+df = df.sample(frac = 0.01,random_state= 42)
+print(df)
+
+### polarsを用いる場合(サンプリング割合とランダム値を指定した場合)
+df2 = pl.scan_parquet(path)
+query = (
+    df2
+    .select(pl.all()
+            .sample(fraction= 0.01, seed= 42))
+)
+print(query.collect())
