@@ -76,6 +76,7 @@ query = (
 print(query.collect())
 
 ### 複数のデータ型を抽出する場合(例：数値とテキスト)
+#### 引数にリストを渡す。
 df = pd.read_parquet(path = path)
 df = df.select_dtypes(["number","str"])
 print(df)
@@ -83,5 +84,28 @@ print(df)
 df2 = pl.scan_parquet(path)
 query = (
     df2.select(pl.col([pl.Int64,pl.String]))
+)
+print(query.collect())
+
+## 条件を用いた行の抽出
+### pandasを用いた場合
+df = pd.read_parquet(path = path)
+df = df.query("2 <= people_num <= 4")
+print(df)
+
+### polarsを用いた場合(&演算子を利用した場合。andは利用できないので注意)
+df2 = pl.scan_parquet(path)
+query = (
+    df2
+    .filter((pl.col("people_num") >= 2) & (pl.col("people_num") <= 4))
+    .select(pl.all()) ### このpl.select(pl.all())は省略可能。
+)
+print(query.collect())
+
+### polarsを用いた場合（.is_between()を利用した場合）
+df2 = pl.scan_parquet(path)
+query = (
+    df2
+    .filter(pl.col("people_num").is_between(2, 4))
 )
 print(query.collect())
