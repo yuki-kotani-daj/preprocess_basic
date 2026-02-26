@@ -61,3 +61,27 @@ print(pd_customer)
 df2 = pl.read_parquet(path3)
 cols = [col.name for col in df2.select(pl.all().is_null()) if col.any()]
 print(df2.select(cols))
+
+## 特定のデータ型の列を抽出する
+### pandasの場合
+df = pd.read_parquet(path = path)
+df = df.select_dtypes(include="number")
+print(df)
+
+### polarsの場合
+df2 = pl.scan_parquet(path)
+query = (
+    df2.select(pl.col(pl.Int64))
+)
+print(query.collect())
+
+### 複数のデータ型を抽出する場合(例：数値とテキスト)
+df = pd.read_parquet(path = path)
+df = df.select_dtypes(["number","str"])
+print(df)
+
+df2 = pl.scan_parquet(path)
+query = (
+    df2.select(pl.col([pl.Int64,pl.String]))
+)
+print(query.collect())
