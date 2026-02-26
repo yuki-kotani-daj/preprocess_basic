@@ -128,3 +128,30 @@ query = (
             .sample(fraction= 0.01, seed= 42))
 )
 print(query.collect())
+
+## 不均衡データの調整（アンダーサンプリング＋バギング）
+### pandasの場合
+#### df.query()で文字列を抽出する場合、全体を""で括る必要があるが、
+#### 特定の文字列を抽出したい場合、その条件文字列はさらに''で囲むため、"** = '**'"の形式となる。
+df = pd.read_parquet(path = path)
+majority = df.query("status == 'reserved'")
+minority = df.query("status == 'canceled'")
+
+df = pd.concat([
+    minority,
+    majority.sample(len(minority))
+])
+print("pandasを用いた不均衡データ抽出：\n",df)
+
+### polarsの場合
+df2 = pl.scan_parquet(path)
+majority2 = df2.filter(pl.col("status") == "reserved")
+minority2 = df2.filter(pl.col("status") == "canceled")
+
+query1 = (
+    pl.concat([minority2,majority2
+               .select(pl.all().sample(minority2
+                                       .select(pl.len()).collect().get_column("len")))])
+    )
+
+print("polarsを用いた不均衡データ抽出：\n",query1.collect())
