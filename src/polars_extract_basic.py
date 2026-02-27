@@ -1,6 +1,10 @@
 # 抽出
+import time
 import pandas as pd
 import polars as pl
+from imblearn.under_sampling import RandomUnderSampler
+from imblearn.ensemble import BalancedBaggingClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 path = "/Users/yuki_kotani/data_science/preprocess_basic/data/reservation.parquet"
 
@@ -155,3 +159,53 @@ query1 = (
     )
 
 print("polarsを用いた不均衡データ抽出：\n",query1.collect())
+
+### pandasとimbalance-learnを用いる場合
+
+start1 = time.time()
+
+df = pd.read_parquet(path = path)
+feature_cols = ["length_of_stay","people_num","total_price"]
+target_col = "status"
+x = df[feature_cols]
+y = df[target_col]
+
+sampler = RandomUnderSampler()
+x_sample,y_sample = sampler.fit_resample(x,y)
+print("特徴量のサンプリング結果：\n",x_sample,"\n目的変数のサンプリング結果：\n",y_sample)
+
+end1 = time.time()
+time_diff1 = end1 - start1
+
+### polarsとimbalanced-learnを用いる場合
+
+start2 = time.time()
+
+df2 = pl.scan_parquet(path)
+sampler = RandomUnderSampler()
+
+x2 = df2.select(pl.col(feature_cols)).collect().to_pandas()
+y2 = df2.select(pl.col(target_col)).collect().to_pandas()
+
+x2_sample,y2_sample = sampler.fit_resample(x2,y2)
+
+print("polarsによるサンプリング結果（特徴量）:\n",x2_sample,"\npolarsによるサンプリング結果（特徴量）:\n",y2_sample)
+
+end2 = time.time()
+time_diff2 = end2 - start2
+print("pandas + imblearn：",time_diff1,"\npolars + imblearn：",time_diff2)
+
+### アンダーサンプリングとバギングにより２値の不均衡データの分類問題を効率的に解く
+feature_cols = ["length_of_stay","people_num","total_price"]
+target_col = "status"
+
+df2 = pl.scan_parquet(path)
+classifier = DecisionTreeClassifier()
+model = BalancedBaggingClassifier(estimator= classifier)
+
+x2 = df2.select(pl.col(feature_cols)).collect()
+y2 = df2.select(pl.col(target_col)).collect()
+dtc = model.fit(x2,y2)
+pred = pl.DataFrame(dtc.predict(x2),schema= ["predict"]).with_columns(y2["status"].alias("test"))
+
+print("score_r2:\n",dtc.score(x2,y2),"\nresult:\n",pred)
