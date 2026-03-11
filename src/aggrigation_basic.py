@@ -68,3 +68,32 @@ query = (
 )
 reservation2 = query.collect()
 print("nullを除外したユニーク顧客数：\n",reservation2)
+
+## ホテル予約データについて、キャンセルを除いて予約単価のパーセンタイル値を算出したい
+### pandasの場合
+pd.set_option("display.float_format","{:.3f}".format)
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .agg(
+        median_sales = ("total_price","median"),
+        p25_sales = ("total_price", lambda s: s.quantile(0.25)),
+        p75_sales = ("total_price", lambda s: s.quantile(0.75))
+    )
+)
+print(reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .select([
+        pl.col("total_price").quantile(0.25, interpolation = "linear").alias("p25_sales"),
+        pl.col("total_price").median().alias("median_sales"),
+        pl.col("total_price").quantile(0.75, interpolation= "linear").alias("p75_sales")
+    ])
+)
+reservation2 = query.collect()
+print(reservation2)
