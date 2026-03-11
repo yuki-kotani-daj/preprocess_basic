@@ -38,3 +38,33 @@ query = (
         pl.col("total_price").std().alias("std_unit_price")])
 )
 print(query.collect())
+
+## ホテル予約データについて、キャンセルを除外して顧客のユニーク数を調べたい
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .customer_id.nunique()
+)
+print("unique_customers:",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .select(pl.n_unique("customer_id").alias("num_customer"))
+)
+reservation2 = query.collect()
+print(reservation2)
+
+### polars_nullを除いてユニークカウントしたい場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .select(pl.col("customer_id").drop_nulls().n_unique().alias("num_customer"))
+)
+reservation2 = query.collect()
+print("nullを除外したユニーク顧客数：\n",reservation2)
