@@ -97,3 +97,36 @@ query = (
 )
 reservation2 = query.collect()
 print(reservation2)
+
+## ホテル予約データにて、キャンセルを除外して、ホテル毎の予約人数の最頻値を知りたい。
+### pandasの場合_最頻値が複数個ある場合に、行を足して全ての候補を表示する
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .groupby("hotel_id")
+    .agg(mode_people_num = ("people_num", lambda s : s.mode()))
+    .explode("mode_people_num")
+)
+print("pandasの場合：\n",reservation)
+
+### pandasの場合_最頻値が複数個ある場合に、一番最初の値だけ表示する
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .groupby("hotel_id")
+    .agg(mode_people_num = ("people_num", lambda s : s.mode().iloc[0]))
+)
+print("pandasの場合：\n",reservation)
+
+## polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .group_by(pl.col("hotel_id"))
+    .agg(pl.col("people_num").mode().first().alias("mode_people_num"))
+)
+reservation2 = query.collect()
+print("polarsの場合：\n",reservation2)
