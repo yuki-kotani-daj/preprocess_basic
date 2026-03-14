@@ -192,3 +192,44 @@ query = (
 )
 reservation2 = query.collect()
 print(reservation2)
+
+## 指定された平均部屋単価毎にホテル数を集計したい
+path2 = "/Users/yuki_kotani/data_science/preprocess_basic/data/hotel.parquet"
+### pandasの場合
+hotels = pd.read_parquet(path = path2)
+hotels = (
+    hotels
+    .assign(unit_price_range = lambda df:
+            np.where(df.unit_price < 5000, 0,
+                     np.where(df.unit_price < 10000, 5000,
+                              np.where(df.unit_price < 20000, 10000,
+                                       np.where(df.unit_price < 30000, 20000,
+                                                np.where(df.unit_price >= 30000, 30000, 1))))))
+    .groupby("unit_price_range").size()
+    )
+print("pandasの場合：\n",hotels)
+
+### pandasの別解（Cut)
+hotels = pd.read_parquet(path = path2)
+hotels = (
+    hotels
+    .groupby(pd.cut(hotels.unit_price,[-np.inf,5000,10000,20000,30000,np.inf], right= False)).size()
+)
+print("pandas_cutを使って区切った場合：\n",hotels)
+
+### polarsの場合
+hotels2 = pl.scan_parquet(path2)
+query = (
+    hotels2
+    .group_by(
+        pl.when(pl.col("unit_price") < 5000).then(0)
+        .when(pl.col("unit_price") < 10000).then(5000)
+        .when(pl.col("unit_price") < 20000).then(10000)
+        .when(pl.col("unit_price") < 30000).then(20000)
+        .when(pl.col("unit_price") >= 30000).then(30000)
+        .otherwise(1)
+    )
+    .agg(pl.len())
+)
+hotels2 = query.collect()
+print("polarsの場合：\n",hotels2)
