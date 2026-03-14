@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import polars as pl
 
 # データ全体の集約と代表的な集約関数
@@ -170,3 +171,24 @@ query = (
 )
 reservation2 = query.collect()
 print("polarsの場合：\n",reservation2)
+
+## 価格帯毎にホテル数を集計したい
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .assign(unit_price_range = lambda df:
+            (np.floor(df.total_price / 5000) * 5000).astype(int))
+    .groupby("unit_price_range").size()
+)
+print("pandasの場合：\n",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .group_by((pl.col("total_price") / 5000).floor().cast(pl.Int32) * 5000)
+    .agg(pl.len())
+)
+reservation2 = query.collect()
+print(reservation2)
