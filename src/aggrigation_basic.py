@@ -130,3 +130,43 @@ query = (
 )
 reservation2 = query.collect()
 print("polarsの場合：\n",reservation2)
+
+## キャンセルを除いて、ホテル毎の売り上げを算出したい
+### pandaasの場合
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .groupby("hotel_id").agg(sales = ("total_price","sum"))
+)
+print("pandasの場合：\n",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .group_by(pl.col("hotel_id")).agg(pl.sum("total_price"))
+)
+reservation2 = query.collect()
+print("polarsの場合：\n",reservation2)
+
+## キャンセルを除いて、ホテル毎、顧客毎の予約数を計算
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .groupby(["hotel_id","customer_id"]).size()
+)
+print("pandasの場合：\n",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .group_by(["hotel_id","customer_id"]).agg(pl.len().alias("num_reserve"))
+)
+reservation2 = query.collect()
+print("polarsの場合：\n",reservation2)
