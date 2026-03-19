@@ -233,3 +233,63 @@ query = (
 )
 hotels2 = query.collect()
 print("polarsの場合：\n",hotels2)
+
+## 年月毎の売り上げを計算したい
+### pandasの場合_NG例：dt.strftime関数が重い
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .assign(month = lambda df: df.checkout_date.dt.strftime("%Y-%m"))
+    .groupby("month").total_price.sum()
+)
+print("pandasの場合：\n",reservation)
+
+### pandasの場合_OK例
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .query("status != 'canceled'")
+    .assign(month = lambda df: df.checkout_date.dt.to_period("M"))
+    .groupby("month").total_price.sum()
+)
+print("pandasの場合2:\n",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .filter(pl.col("status") != "canceled")
+    .group_by(pl.col("checkout_date").dt.truncate("1y"))
+    .agg(
+        pl.col("total_price").sum()
+    ).sort("checkout_date",descending= False)
+)
+reservation2 = query.collect()
+print(reservation2)
+
+## チェックインから７日以内にキャンセルした顧客を知りたい
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .assign(is_canceled_within_7days_to_checkin = lambda df:
+            (df.status == "canceled") & ((df.checkin_date - df.canceled_at).dt.days <= 7))
+    .groupby("customer_id").is_canceled_within_7days_to_checkin.max()
+)
+print("pandasの場合\n",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query = (
+    reservation2
+    .group_by(pl.col("customer_id"))
+    .agg(
+        (
+            (pl.col("status") == "canceled")
+            & ((pl.col("checkin_date") - pl.col("canceled_at")).dt.total_days() <= 7)
+               ).max()
+    )
+)
+reservation2 = query.collect()
+print("ploasの場合：\n",reservation2)
