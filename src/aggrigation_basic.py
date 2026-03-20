@@ -274,22 +274,54 @@ reservation = pd.read_parquet(path = path)
 reservation = (
     reservation
     .assign(is_canceled_within_7days_to_checkin = lambda df:
-            (df.status == "canceled") & ((df.checkin_date - df.canceled_at).dt.days <= 7))
+            (df.status == "canceled") &
+            ((df.checkin_date - df.canceled_at).dt.days <= 7))
     .groupby("customer_id").is_canceled_within_7days_to_checkin.max()
 )
-print("pandasの場合\n",reservation)
+print("pandasの場合：\n",reservation)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+query =(
+    reservation2
+    .group_by("customer_id")
+    .agg(
+        ((pl.col("status") == "canceled") &
+         ((pl.col("checkin_date") - pl.col("canceled_at")).dt.total_days() <= 7)).max()
+    )
+)
+reservation2 = query.collect()
+print("polarsの場合：\n",reservation2)
+
+## 顧客毎の売上高とキャンセル率を知りたい
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+reservation = (
+    reservation
+    .assign(cancel_cnt = lambda df:
+            np.where(df.status == "canceled",1,0),
+            total_price_without_canceled = lambda df:
+            np.where(df.status == "reserved",df.total_price,0))
+    .groupby("customer_id")
+    .agg({
+        "reservation_id":"count",
+        "cancel_cnt":"sum",
+        "total_price_without_canceled":"sum"
+    })
+    .assign(cancel_rate = lambda df:
+            df.cancel_cnt / df.reservation_id)
+)
+print("pandasの場合：\n",reservation)
 
 ### polarsの場合
 reservation2 = pl.scan_parquet(path)
 query = (
     reservation2
-    .group_by(pl.col("customer_id"))
-    .agg(
-        (
-            (pl.col("status") == "canceled")
-            & ((pl.col("checkin_date") - pl.col("canceled_at")).dt.total_days() <= 7)
-               ).max()
-    )
+    .group_by("customer_id").agg([
+        pl.col("total_price").filter(pl.col("status") != "canceled").sum(),
+        (pl.col("reservation_id").filter(pl.col("status") == "canceled").len()
+         / pl.len()).alias("cancel_rate")
+    ]).sort("customer_id")
 )
 reservation2 = query.collect()
-print("ploasの場合：\n",reservation2)
+print("polarsの場合：\n",reservation2)
