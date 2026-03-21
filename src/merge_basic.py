@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import polars as pl
 
 # sample-file
@@ -43,3 +44,48 @@ query2 = (
 )
 reservation_check3 = query2.collect()
 print("semi結合の場合：\n",reservation_check3)
+
+## 2019年の売上と予約数をホテルマスタへ追加したい
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+hotel = pd.read_parquet(path = path2)
+
+hotel_master = (
+    hotel
+    .merge(
+        reservation
+        .query("status != 'canceled' and checkout_date.dt.year == 2019")
+        .groupby("hotel_id").total_price.agg(["sum","size"]),
+        on = "hotel_id", how = "left"
+    )
+    .fillna({
+        "sum":0,
+        "size":0
+    })
+)
+print("pandasの場合：\n",hotel_master)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+hotel2 = pl.scan_parquet(path2)
+
+query = (
+    hotel2
+    .join(
+        reservation2
+        .filter((pl.col("status") != "canceled") &
+                (pl.col("checkout_date").dt.year() == 2019)
+                )
+                .group_by("hotel_id").agg(
+                    sales = pl.col("total_price").sum(),
+                    num_reservation = pl.len()
+                ),on = "hotel_id", how = "left"
+                )
+    .with_columns([
+        pl.col("sales").fill_null(0),
+        pl.col("num_reservation").fill_null(0)
+    ])
+)
+
+hotel_master2 = query.collect()
+print("polarsの場合：\n",hotel_master2)
