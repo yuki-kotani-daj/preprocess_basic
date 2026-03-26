@@ -73,19 +73,20 @@ query = (
     hotel2
     .join(
         reservation2
-        .filter((pl.col("status") != "canceled") &
-                (pl.col("checkout_date").dt.year() == 2019)
-                )
-                .group_by("hotel_id").agg(
-                    sales = pl.col("total_price").sum(),
-                    num_reservation = pl.len()
-                ),on = "hotel_id", how = "left"
-                )
-    .with_columns([
-        pl.col("sales").fill_null(0),
-        pl.col("num_reservation").fill_null(0)
-    ])
+        .filter((
+            pl.col('status') != 'canceled') &
+            (pl.col('checkin_date').dt.year() == 2019)
+        )
+        .group_by('hotel_id').agg(
+            num_reservation = pl.len(),
+            sales = pl.col('total_price').sum()
+        ),on = 'hotel_id', how = 'left'
+    )
+    .with_columns(
+        num_reservation = pl.col('num_reservation').fill_null(0),
+        sales = pl.col('sales').fill_null(0)
+    )
 )
 
 hotel_master2 = query.collect()
-print("polarsの場合：\n",hotel_master2)
+print('polarの場合:\n',hotel_master2)
