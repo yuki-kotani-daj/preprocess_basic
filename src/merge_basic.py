@@ -90,3 +90,68 @@ query = (
 
 hotel_master2 = query.collect()
 print('polarの場合:\n',hotel_master2)
+
+## 顧客毎、ホテルタイプ毎の予約数を集計し、顧客マスタへ付与したい
+### pandasの場合
+path3 = '/Users/yuki_kotani/Downloads/awesomebook_v2-main/data/customer.parquet'
+
+reservation = pd.read_parquet(path = path)
+hotel = pd.read_parquet(path = path2)
+customer = pd.read_parquet(path = path3)
+
+master_customer = (
+    customer
+    .merge(
+        reservation[['customer_id','hotel_id','reservation_id']]
+        .merge(
+            hotel[['hotel_id','hotel_type']],on = 'hotel_id', how = 'left'
+        )
+        .assign(
+            ryokan = lambda df:
+            np.where(df.hotel_type == '旅館',1,0),
+            resort_hotel = lambda df:
+            np.where(df.hotel_type == 'リゾートホテル',1,0),
+            business_hotel = lambda df:
+            np.where(df.hotel_type == 'ビジネスホテル',1,0),
+            minsyuku = lambda df:
+            np.where(df.hotel_type == '民宿',1,0)
+        )
+        .groupby('customer_id')[['ryokan','resort_hotel','business_hotel','minsyuku']].sum()
+        ,on = 'customer_id', how = 'left'
+    )
+    .fillna({
+        'ryokan':0,
+        'resort_hotel':0,
+        'business_hotel':0,
+        'minsyuku':0
+    })
+)
+print('pandasの場合：\n',master_customer)
+
+### polarsの場合
+reservation2 = pl.scan_parquet(path)
+hotel2 = pl.scan_parquet(path2)
+customer2 = pl.scan_parquet(path3)
+
+query = (
+    customer2
+    .join(
+        reservation2.select(['customer_id','hotel_id','reservation_id'])
+        .join(
+            hotel2.select(['hotel_id','hotel_type'])
+        ,on = 'hotel_id', how = 'left'
+    ).group_by('customer_id').agg(
+        num_ryokan = pl.col('reservation_id').filter(pl.col('hotel_type') == '旅館').len(),
+        num_resort_hotel = pl.col('reservation_id').filter(pl.col('hotel_type') == 'リゾートホテル').len(),
+        num_business_hotel = pl.col('reservation_id').filter(pl.col('hotel_type') == 'ビジネスホテル').len(),
+        num_minsyuku = pl.col('reservation_id').filter(pl.col('hotel_type') == '民宿').len()
+    ),on = 'customer_id', how = 'left'
+    ).with_columns(
+        num_ryokan = pl.col('num_ryokan').fill_null(0),
+        num_reserot_hotel = pl.col('num_resort_hotel').fill_null(0),
+        num_business_hotel = pl.col('num_business_hotel').fill_null(0),
+        num_minsyuku = pl.col('num_minsyuku').fill_null(0)
+    )
+)
+master_customer2 = query.collect()
+print('polarsの場合：\n',master_customer2)
