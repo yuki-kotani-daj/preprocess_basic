@@ -142,10 +142,14 @@ query = (
             hotel2.select(['hotel_id','hotel_type'])
         ,on = 'hotel_id', how = 'left'
     ).group_by('customer_id').agg(
-        num_ryokan = pl.col('reservation_id').filter(pl.col('hotel_type') == '旅館').len(),
-        num_resort_hotel = pl.col('reservation_id').filter(pl.col('hotel_type') == 'リゾートホテル').len(),
-        num_business_hotel = pl.col('reservation_id').filter(pl.col('hotel_type') == 'ビジネスホテル').len(),
-        num_minsyuku = pl.col('reservation_id').filter(pl.col('hotel_type') == '民宿').len()
+        num_ryokan = pl.col('reservation_id')
+        .filter(pl.col('hotel_type') == '旅館').len(),
+        num_resort_hotel = pl.col('reservation_id')
+        .filter(pl.col('hotel_type') == 'リゾートホテル').len(),
+        num_business_hotel = pl.col('reservation_id')
+        .filter(pl.col('hotel_type') == 'ビジネスホテル').len(),
+        num_minsyuku = pl.col('reservation_id')
+        .filter(pl.col('hotel_type') == '民宿').len()
     ),on = 'customer_id', how = 'left'
     ).with_columns(
         num_ryokan = pl.col('num_ryokan').fill_null(0),
@@ -195,7 +199,8 @@ end_date = date(2019,12,1)
 sales_summary = (
     reservation2
     .filter(pl.col('status') != 'canceled')
-    .with_columns(month = pl.col('checkout_date').dt.truncate('1mo').dt.date().alias('month'))
+    .with_columns(month = pl.col('checkout_date')
+                  .dt.truncate('1mo').dt.date().alias('month'))
     .group_by(['customer_id','month'])
     .agg(sales = pl.col('total_price').sum())
 )
