@@ -182,7 +182,7 @@ monthly_sales_summary = (
         'total_price':0
     })
 )
-print('pandasの場合:\n',monthly_sales_summary)
+print('pandasの場合:\n',monthly_sales_summary.describe())
 
 ## polarsの場合
 ### クエリの連鎖を使って全てLazyuFrameで処理する。
@@ -195,36 +195,32 @@ end_date = date(2019,12,1)
 sales_summary = (
     reservation2
     .filter(pl.col('status') != 'canceled')
-    .with_columns(
-        pl.col('checkout_date').dt.truncate('1mo').dt.date().alias('month')
-    )
+    .with_columns(month = pl.col('checkout_date').dt.truncate('1mo').dt.date().alias('month'))
     .group_by(['customer_id','month'])
-    .agg(
-        sales = pl.col('total_price').sum()
-    )
+    .agg(sales = pl.col('total_price').sum())
 )
 
-month_df = pl.LazyFrame({
-    'month':pl.date_range(start_date,end_date,interval = '1mo', eager = True)
+month_df = (
+    pl.LazyFrame({
+        'month':pl.date_range(start_date,end_date,interval = '1mo',eager = True)
     })
+)
 
 customer_with_month = (
     customer2
-    .select('customer_id')
+    .select(pl.col('customer_id'))
     .join(
         month_df,how = 'cross'
     )
-    )
+)
 
 final_query = (
     customer_with_month
     .join(
-        sales_summary,
-        on = ['customer_id','month'],
-        how = 'left'
+        sales_summary,on = ['customer_id','month'],how = 'left'
     )
     .fill_null(0)
 )
 
 monthly_sales_summary2 = final_query.collect()
-print('polarsの場合:\n',monthly_sales_summary2)
+print('polarsの場合:\n',monthly_sales_summary2.describe())
