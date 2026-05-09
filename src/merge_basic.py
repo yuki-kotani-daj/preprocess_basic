@@ -1,3 +1,4 @@
+from datetime import date
 import pandas as pd
 import numpy as np
 import polars as pl
@@ -155,3 +156,75 @@ query = (
 )
 master_customer2 = query.collect()
 print('polarsの場合：\n',master_customer2)
+
+## 顧客毎の月別の売り上げを計算したい（売上のない月も出力）
+### pandasの場合
+reservation = pd.read_parquet(path = path)
+customer = pd.read_parquet(path = path3)
+
+monthly_sales_summary = (
+    customer[['customer_id']]
+    .merge(
+        pd.period_range('2019-01-01','2019-12-01',freq = 'M').to_series(name = 'month'),
+        how = 'cross'
+    )
+    .merge(
+        reservation
+        .query('status != "canceled"')
+        .assign(
+            month = lambda df:
+            df.checkout_date.dt.to_period('M')
+        )
+        .groupby(['customer_id','month']).total_price.sum(),
+        how = 'left',on = ['customer_id','month']
+    )
+    .fillna({
+        'total_price':0
+    })
+)
+print('pandasの場合:\n',monthly_sales_summary)
+
+## polarsの場合
+### クエリの連鎖を使って全てLazyuFrameで処理する。
+reservation2 = pl.scan_parquet(path)
+customer2 = pl.scan_parquet(path3)
+
+start_date = date(2019,1,1)
+end_date = date(2019,12,1)
+
+sales_summary = (
+    reservation2
+    .filter(pl.col('status') != 'canceled')
+    .with_columns(
+        pl.col('checkout_date').dt.truncate('1mo').dt.date().alias('month')
+    )
+    .group_by(['customer_id','month'])
+    .agg(
+        sales = pl.col('total_price').sum()
+    )
+)
+
+month_df = pl.LazyFrame({
+    'month':pl.date_range(start_date,end_date,interval = '1mo', eager = True)
+    })
+
+customer_with_month = (
+    customer2
+    .select('customer_id')
+    .join(
+        month_df,how = 'cross'
+    )
+    )
+
+final_query = (
+    customer_with_month
+    .join(
+        sales_summary,
+        on = ['customer_id','month'],
+        how = 'left'
+    )
+    .fill_null(0)
+)
+
+monthly_sales_summary2 = final_query.collect()
+print('polarsの場合:\n',monthly_sales_summary2)
