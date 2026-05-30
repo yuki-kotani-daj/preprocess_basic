@@ -199,33 +199,86 @@ end_date = date(2019,12,1)
 sales_summary = (
     reservation2
     .filter(pl.col('status') != 'canceled')
-    .with_columns(month = pl.col('checkout_date')
-                  .dt.truncate('1mo').dt.date().alias('month'))
-    .group_by(['customer_id','month'])
-    .agg(sales = pl.col('total_price').sum())
+    .with_columns(
+        month = pl.col('checkout_date').dt.truncate('1mo').dt.date()
+    )
+    .group_by(pl.col(['customer_id','month']))
+    .agg(
+        sales = pl.col('total_price').sum()
+    )
 )
 
 month_df = (
     pl.LazyFrame({
-        'month':pl.date_range(start_date,end_date,interval = '1mo',eager = True)
+        'month':pl.date_range(start = start_date, end = end_date,
+                              interval = '1mo', eager = True)
     })
 )
 
 customer_with_month = (
     customer2
     .select(pl.col('customer_id'))
-    .join(
-        month_df,how = 'cross'
-    )
+    .join(month_df, how = 'cross')
 )
 
 final_query = (
     customer_with_month
     .join(
-        sales_summary,on = ['customer_id','month'],how = 'left'
+        sales_summary, on = ['customer_id','month'],
+        how = 'left'
     )
     .fill_null(0)
 )
 
-monthly_sales_summary2 = final_query.collect()
-print('polarsの場合:\n',monthly_sales_summary2.describe())
+monthly_sales_report = final_query.collect()
+print('polarsの場合:\n',monthly_sales_report)
+
+# 予約履歴データにキャンペーン情報を付与する
+path4 = '/Users/yuki_kotani/Downloads/awesomebook_v2-main/data/campaign.parquet'
+reservation = pd.read_parquet(path = path)
+campaign = pd.read_parquet(path = path4)
+
+reservation = (
+    reservation
+    .assign(
+        reserved_date = lambda df:
+        df.reserved_at.dt.normalize()
+    )
+    .merge(
+        campaign
+        .assign(
+            reserved_date = lambda df:
+            df.apply(lambda r:
+                     pd.date_range(r.starts_at, r.ends_at), axis = 1)
+        )[['campaign_name','reserved_date']]
+        .explode('reserved_date'),
+        how = 'left', on = 'reserved_date'
+    )
+    .drop(columns = 'reserved_date')
+)
+print('pandasの場合:\n',reservation)
+
+# polarsの場合
+reservation2 = pl.scan_parquet(path)
+campaign2 = pl.scan_parquet(path4)
+
+reservation_with_date = (
+    reservation2
+    .with_columns(
+        reserve_date = pl.col('reserved_at').dt.date()
+        )
+    .join(
+        campaign2
+          .select([
+              pl.date_ranges(start = pl.col('starts_at').dt.date(),
+                            end = pl.col('ends_at').dt.date(), interval = '1d')
+                            .alias('reserve_date'),
+                            pl.col('campaign_name')]
+                            )
+                            .explode('reserve_date'),
+                            on = 'reserve_date', how = 'left'
+          )
+          .drop('reserve_date')
+          )
+reservation_with_campaign = reservation_with_date.collect()
+print('polarsの場合:\n',reservation_with_campaign)
